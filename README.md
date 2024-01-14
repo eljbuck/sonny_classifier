@@ -14,6 +14,10 @@ Download .zip file from [live app.](https://ccrma.stanford.edu/~eljbuck/109/proj
 
 ### Method 2: Install from Source
 
+```{bash}
+git clone https://github.com/eljbuck/sonny_classifier.git
+```
+
 ## Usage
 To run the classifier, navigate to `./src/algo`. Then, with Python 3 installed, run the following command in the command line:
 
