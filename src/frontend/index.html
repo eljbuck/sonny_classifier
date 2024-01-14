@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <title>SONI-METRIC MUSIC-NOTES</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;700&display=swap">
+    <script src="./scripts/script.js" defer></script>
+    <script type="text/javascript" async
+        src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-MML-AM_CHTML">
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.3.1/styles/default.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.3.1/highlight.min.js"></script>
+    <script>hljs.initHighlightingOnLoad();</script>
+    <style>
+        pre {
+            background-color: #2d2d2d; /* Customize background color */
+            padding: 20px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        code.python {
+            font-family: 'Fira Code', monospace;
+            font-size: 16px;
+            background-color: #2d2d2d; /* Customize background color for syntax highlighting */
+            color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+
+        <!-- Title Section -->
+        <header>
+            <h1>SONI-METRIC MUSIC-NOTES</h1>
+            <h2>"Music is the space between the notes" - Claude Debussy</h2>
+            <p class="meta-info">
+                <span>By: Ethan Buck</span>
+                <span>Date: 12/05/2023</span>
+                <span>CS 109 Final Project</span>
+            </p>
+            <a href="https://ccrma.stanford.edu/~eljbuck/109/project/SonnyClassifier.zip" class="flat-button" download>Download Project Files (.zip)</a>
+        </header>
+
+    <!-- Section 1: Background -->
+
+
+    <section>
+        <div class="background-section">
+            <div class="text-content">
+                <h2>Background</h2>
+                <p>In 1957, tenor saxophonists Sonny Stitt and Sonny Rollins joined Dizzy Gillespie to record the album, <em>Sonny Side Up</em>, which showcases two equally impressive, yet subtly distinct approaches to the tenor sax. Unfortunately, unless you've spent years listening to Rollins or Stitt, it's nearly impossible to tell them apart.</p>
+                <p>Consider the following audio clip, from the track <a href="https://www.youtube.com/watch?v=4aqUVtl3g8s" target="_blank">"The Eternal Triangle."</a> This clip begins with one Sonny soloing and transitions to the other in the middle. Can you tell which Sonny is which? </p><audio controls>
+                    <source src="./assets/audio/switch.wav" type="audio/wav">
+                </audio>
+            </div>
+            <div class="image-content">
+                <img src="./assets/img/album_cover.jpg" alt="Album Cover">
+            </div>
+        </div>
+    </section>
+
+    <!-- Section 2: Goal -->
+    <section>
+        <h2>Goal</h2>
+        <p>I intend to build a Naive Bayes classifier to distinguish between Rollins' and Stitt's solos on <em>Sonny Side Up</em>. I'm choosing Naive Bayes over other models (like logistic regression) mostly because I lack sufficient data to properly train a logistic regression model. I will discuss some consequences of using Naive Bayes in my Limitations section.</p>
+    </section>
+
+    <!-- Section 3: Choosing Features -->
+    <section id="choosing_features">
+        <h2>Choosing Features</h2>
+        <p>To build this model, we need to quantify some attributes of jazz improvisation. While most musical elements are hard to quantify, we can take inspiration from the above Debussy quote and focus on the space between notes. Specifically, we'll measure note durations and intervals. </p>
+        <div class="text-container">
+            <div class="text-snippet left" id="text1">
+                <button type="button" class="collapsible">Note Duration:</button>
+                    <div class="content">
+                    <p><ul>
+                        <li>the length of any given note in terms of Western Classical Notation (e.g. eighth note, dotted quarter note, etc.)</li>
+                        <li>approximated by measuring the time between any two consecutive notes, normalizing the duration based on the beats per minute, and discretizing it according to the corresponding note length bucket</li>
+                        <li>see get_times() and get_note_durs() in Data Formatter for more info</li>
+                        </ul></p>
+                    </div>
+            </div>
+        
+            <div class="text-snippet left" id="text1">
+                <button type="button" class="collapsible">Interval:</button>
+                    <div class="content">
+                    <p><ul>
+                        <li>the distance (in semitones) in between any two consecutive notes</li>
+                        <li>e.g. the distance between C3 and F3 is 5 semitones</li>
+                        <li>see get_notes() and get_intervals() in Data Formatter for more info</li>
+                        </ul></p>
+                    </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Section 3: Data Collection -->
+    <section id="data-collection">
+        <h2>Data Collection and Training</h2>
+        <p>To collect training data, I transcribed a solo from each of Rollins (<a href="https://www.youtube.com/watch?v=-6pBy6IYqLM" target="_blank">"Namely You"</a> from <em>Newk's Time</em>) and Stitt (<a href="https://www.youtube.com/watch?v=Tfp1vGHXfI0" target="_blank">"Jaunty"</a> from <em>Swings the Most</em>) on a MIDI keyboard. Then, using the <a href="https://mido.readthedocs.io/en/stable/" target="_blank">Mido</a> library in Python, I extracted the timings (in ms) between each note, as well as the intervals between any two notes. From here, I discretized/normalized the timings to get note durations and formatted the data, such that I could load in any MIDI file and get a frequency distribution of the note durations and the intervals (both with LaPlace priors). </p>
+        <button type="button" class="collapsible">MIDI File Reader</button>
+            <div class="content"><pre><code class="python">import mido
+from mido import MidiFile
+
+# given a MidiFile, returns set tempo or default otherwise
+def get_tempo(mid):
+    for msg in mid.play():
+        if msg.type == 'set_tempo':
+            return msg.tempo
+        else:
+            # Default tempo.
+            return 500000
+    
+# given a MidiFile, this function returns the index of the first note
+def position(mid):
+    i = 0
+    while not mid.tracks[0][i].type == 'note_on':
+        i += 1
+    return i
+
+# Given a monophonic, legato, non-overlapping midi file, this function returns a dictionary of the 
+# total time elapsed (in sec) since the first note and the midi note value. More specifically,
+# let t_i = total time elapsed from the beginning of the first note to the end of the ith note 
+# and let n_i = midi value for the ith note. Our dictionary takes the following format:
+
+# { t_1: n_1, t_2: n_2, ... , t_i: n_i }
+def populate_map(midi_file_path):
+    map = {}
+    mid = MidiFile(midi_file_path)
+    ticks_elapsed = 0
+    polytouch_sum = 0
+    mid_tempo = get_tempo(mid)
+    advance = position(mid)     # starts counting time at the beginning of the file
+    for i in range(len(mid.tracks[0]) - advance):
+        msg = mid.tracks[0][i + advance]
+        if msg.type == 'polytouch':     # accounts for time elapse during weird polytouch state
+            polytouch_sum += msg.time
+        elif msg.type == 'note_off':
+            ticks_elapsed += msg.time + polytouch_sum
+            map[mido.tick2second(ticks_elapsed, mid.ticks_per_beat, tempo=mid_tempo)] = msg.note
+            polytouch_sum = 0
+    return map</code></pre></div>
+    <p></p>
+                    <button type="button" class="collapsible">Data Formatter</button>
+                    <div class="content"><pre><code class="python"># given a dictionary of time stamps and the corresponding note changes, this function
+# returns the list of times in between each of the notes (much like PSet 4 Q9)
+def get_times(time_map):
+    prev = 0
+    times = []
+    for time in time_map:
+        times.append(round((time - prev) * 1000, 2))
+        prev = time
+    return times
+
+# given a list of times and a bpm, this function will return a list of note duration
+# values (e.g. 1/16 note, 1/8 triplet, dotted half, etc). This discretizes our 
+# timing data, as well as normalizes varying bpms
+def get_note_durs(times, bpm):
+    durs = []
+    bpms = bpm / 60 * 1000   # gets beats per millisecond
+    sixteenth = bpms / 4     # duration of 16th note in ms (can do our cutoff calculations based on this)
+    eighth = 2 * sixteenth   # duration of 8th note in ms
+    quarter = 2 * eighth     # etc.
+    half = 2 * quarter
+    whole = 4 * quarter
+    eighth_t = quarter / 3   # eighth note triplet
+    quarter_t = half / 3     # quarter note triplet
+    dot_half = quarter * 3   # dotted half note
+    for time in times:
+        if (time > whole - eighth): # check greater than 3/4 note cutoff
+            durs.append('>=4/4')
+        elif (time > dot_half - eighth): # check greater than half note cutoff
+            durs.append('3/4')
+        elif (time > half - eighth): # check greater than 1/4 note cutoff
+            durs.append('1/2')
+        elif (time > (quarter + quarter_t) / 2): #checks greater than 1/4 trip cutoff
+            durs.append('1/4')
+        elif (time > (quarter_t + eighth) / 2): # checks greater than 1/8 note cutoff
+            durs.append('1/4t')
+        elif (time > (eighth + eighth_t) / 2): # checks greater than 1/8 trip cutoff
+            durs.append('1/8')
+        elif (time > (eighth_t + sixteenth) / 2): # checks greater than 1/16 note cutoff
+            durs.append('1/8t')
+        elif (time > (eighth_t + sixteenth) / 2 - sixteenth): # checks greater than < 1/16 cutoff
+            durs.append('1/16')
+        else: # we know our note is faster than a 16th note
+            durs.append('<1/16')
+    return durs
+
+# given a list of note durations, this function creates a frequency map of different
+# duration note values (e.g. 1/16 note, 1/8 triplet note, 1/8 note, 1/4 triplet note, etc)
+def get_dur_map(durs):
+    # instantiates map with laplace prior (assume at least 1 has been observed for each bucket)
+    dur_map = {'<1/16': 1, '1/16': 1, '1/8t': 1, '1/8': 1, '1/4t': 1, 
+                '1/4': 1, '1/2': 1, '3/4': 1, '>=4/4': 1} 
+    for dur in durs:
+        dur_map[dur] += 1
+    return dur_map
+
+# given a dictionary of time stamps and the corresponding note changes, this function
+# returns a list of all the notes (in terms of midi numbers) played throughout
+def get_notes(time_map):
+    notes = []
+    for time in time_map:
+        notes.append(time_map[time])
+    return notes
+
+# given a list of notes (in midi), this function returns a list of the intervals
+# in between each of the notes (returns list of size len(notes) - 1)
+def get_intervals(notes):
+    intervals = []
+    for i in range(len(notes)):
+        if i < len(notes) - 1:
+            intervals.append(notes[i + 1] - notes[i])
+    return intervals
+
+# given a list of intervals, this function returns a frequency map of all intervals
+# (with laplace prior for all possible intervals)
+def get_intervals_map(intervals):
+    map = {}
+    #laplace prior for all possible intervals (extremely unlikely a leap of > 24 semitones occurs)
+    for i in range(24):
+        map[i] = 1
+        map[-i] = 1    
+    for interval in intervals:
+        if interval in map:
+            map[interval] += 1
+        else:
+            map[interval] = 1
+    # sort the dictionary for convenience
+    keys = list(map.keys())
+    keys.sort()
+    sorted_dict = {i: map[i] for i in keys}
+    return sorted_dict
+
+# given any frequency map, this function returns a dictionary of the pmf
+def map_to_pmf(map):
+    pmf = map
+    sum = 0.0
+    for key in map:
+        sum += map[key]
+    for key in pmf:
+        pmf[key] /= sum
+    return pmf
+
+# given a list of midi file names, if test param is false (i.e. data is for training), 
+# this function returns a list in the following format:
+# 
+# [ {duration_pmf} , {interval_pmf} ], where duration_pmf and interval_pmf
+# are both dictionarys and duration_pmf['1/4'] = P(playing a quarter note)
+# 
+# if test param is true (i.e. data is for testing) the function returns the following format:
+#
+# [ [dur_list], [intvl_list] ], where dur_list and intvl_list are lists of all instances
+# of note durations and intervals in the given midi files
+def format_data(midi_file_names, test):
+    output = []
+    dur_list = []
+    intvl_list = []
+    for midi_file_name in midi_file_names:
+        map = populate_map(midi_file_name)
+        times = get_times(map)
+        dur_list += get_note_durs(times, midi_file_names[midi_file_name])
+        notes = get_notes(map)
+        intvl_list += get_intervals(notes)
+    if test:
+        output.append(dur_list)
+        output.append(intvl_list)
+    else: 
+        dur_map = get_dur_map(dur_list)
+        intvl_map = get_intervals_map(intvl_list)
+        output.append(map_to_pmf(dur_map))
+        output.append(map_to_pmf(intvl_map))
+    return output</code></pre></div>
+        <p>From here, I loaded my exported MIDI files of each Sonny's solos into this file reader and was able to get the following frequency distributions:</p>
+        <div class="image-container">
+            <img src="./assets/histograms/rollins_note_durs.png" alt="Rollins Note Duration Frequency Distribution" class="lightbox-trigger">
+            <img src="./assets/histograms/stitt_note_durs.png" alt="Stitt Note Duration Frequency Distribution" class="lightbox-trigger">
+        </div>
+        <div class="lightbox" id="lightbox">
+            <span class="close-button" onclick="closeLightbox()">×</span>
+            <img src="" alt="Full Screen Image" class="lightbox-image">
+        </div>
+        <div class="image-container">
+            <img src="./assets/histograms/rollins_intervals.png" alt="Rollins Interval Frequency Distribution" class="lightbox-trigger">
+            <img src="./assets/histograms/stitt_intervals.png" alt="Stitt Interval Frequency Distribution" class="lightbox-trigger">
+        </div>
+        <div class="lightbox" id="lightbox">
+            <span class="close-button" onclick="closeLightbox()">×</span>
+            <img src="" alt="Full Screen Image" class="lightbox-image">
+        </div>
+        <p>With these frequency distributions, we can now (with some key assumptions) determine the likelihood that any inputted solo was played by either Rollins or Stitt.</p>
+    </section>
+
+    <!-- Section 4: Probability -->
+    <section id="probability">
+        <h2>Probability Theory</h2>
+        <p>Let \(X\) be the event that our input solo was played by either Rollins or Stitt. Now, let \(S\) be the event that some Sonny played the given solo. We want to find \(P(S | X)\).</p>
+        <p> Now, assume that \(X\) can be approximated by its note duration distribution \((N)\) and interval distribution \((I)\). We thus get \(P(S | X) \approx P(S | N, I)\) to which we can employ Bayes Theorem:
+            <div class="math-container">
+                \(P(S | N, I) = \frac{P(N, I | S)P(S)}{P(N, I)} \propto P(N, I | S)P(S)\) 
+            </div>
+        Next, let's make the Naive Bayes assumption that our features \(N\) and \(I\) are independent. From here, we get the following: 
+            <div class="math-container">
+                \(P(N, I | S)P(S) = P(N | S)P(I| S)P(S)\)
+            </div>
+        Now, let's assume IID data (each note duration is IID and each interval is IID). We thus get \(P(N|S) = \prod_{i = 1}^{n}P(N_i | S)\) where \(N_i\) is the ith note duration in the solo and \(P(I|S) = \prod_{i = 1}^{n}P(I_i | S)\) where \(I_i\) is the ith interval in the solo. So, we get the following:
+        <div class="math-container">
+            \(P(N | S)P(I| S)P(S) = \prod_{i = 1}^{n}P(N_i | S)\cdot\prod_{i = 1}^{n}P(I_i | S)\cdot P(S)\)
+        </div>
+        Finally, in anticipation of very small probabilities, we can take the log of all of our terms:
+        <div class="math-container">
+            \(\log(\prod_{i = 1}^{n}P(N_i | S)\cdot\prod_{i = 1}^{n}P(I_i | S)\cdot P(S)) = \sum_{i = 1}^{n}\log(P(N_i | S)) + \sum_{i = 1}^{n}\log(P(I_i | S)) + \log(P(S))\) 
+        </div>
+    </p>
+    </section>
+
+    <!-- Section 5: Testing -->
+    <section id="testing">
+        <h2>Testing</h2>
+        <p>Using these results, we can define our log likelihood function, \(LL(S)\), for some Sonny, \(S\), as the following:
+            <div class="math-container">
+                \(LL(S) = \sum_{i = 1}^{n}\log(P(N_i | S)) + \sum_{i = 1}^{n}\log(P(I_i | S)) + \log(P(S))\) 
+            </div>
+            <button type="button" class="collapsible">\(LL(S)\)</button>
+            <div class="content"><pre><code class="python">import numpy
+                    
+# given training data, test data, and a prior, this funtion uses Naive Bayes 
+# to calculate the log of the likelihood score that the test data
+# was played by the subject of the training data
+def calc_log_likelihood(training_data, test_data, prior):
+    log_p_dur_given_training = 0
+    for dur in test_data[0]:
+        p_played_by_training = numpy.log(training_data[0][dur])
+        log_p_dur_given_training += p_played_by_training
+    log_p_interval_given_training = 0
+    for interval in test_data[1]:
+        p_played_by_training = numpy.log(training_data[1][interval])
+        log_p_interval_given_training += p_played_by_training
+    return numpy.log(prior) + log_p_interval_given_training + log_p_dur_given_training</code></pre></div></p>
+    <p>Now, per our goal, we want to, given some input solo, classify whether it's more likely to have been played by Rollins or Stitt. To do so, we must find the ratio between their likelihood scores or equivalently find the difference between their log likelihood scores (with assumed equal priors).</p>    
+        <button type="button" class="collapsible">Classifier</button>
+            <div class="content"><pre><code class="python"># given some test data, as well as Stitt's and Rollin's training data, this 
+# function compares the log likelihood scores given Stitt and Rollins and 
+# estimates whether it is more likely that Stitt played the test data or 
+# Rollins played the test data
+def classify(test_data, stitt_data, rollins_data):
+    log_p_stitt = calc_log_score(stitt_data, test_data, 0.5)
+    log_p_rollins = calc_log_score(rollins_data, test_data, 0.5)
+    print("LL(Stitt) =", round(log_p_stitt, 2))
+    print("LL(Rollins) =", round(log_p_rollins, 2))
+    margin = round(numpy.abs(log_p_stitt - log_p_rollins), 2)
+    if log_p_stitt - log_p_rollins > 0:
+        print('It is most likely to have been played by Stitt, with a margin of ', margin)
+    else:
+        print('It is most likely to have been played by Rollins, with a margin of ', margin)</code></pre></div></p>
+    <label for="parameter">Choose an input solo and run the classifier!</label>
+    <select id="parameterDropdown">
+      <option value="sunny stitt">Stitt on "Sunny Side of the Street"</option>
+      <option value="sunny rollins">Rollins on "Sunny Side of the Street"</option>
+      <option value="eternal stitt">Stitt on "The Eternal Triangle"</option>
+      <option value="eternal rollins">Rollins on "The Eternal Triangle"</option>
+    </select>
+  
+    <button onclick="runClassifierOne('parameterDropdown', 'console', )">Run Classifier</button>
+  
+    <div id="console" class="console"></div>
+    <div id="codeBlock1" class="code-block"></div>
+    </section>
+
+    <!-- Section 6: Limitations -->
+    <section id="Results">
+        <h2>Assessment</h2>
+        <p>We got 75% correct! Indeed, our model classified Rollins on "The Eternal Triangle" incorrectly, but the relative margins for Stitt and Rollins on "The Eternal Triangle," reveal that our model is <em>more</em> confident that Stitt is the true Stitt. Moreover, if we consider that any song on this record will have exactly one solo from each Sonny, we can leverage this to make our classification problem easier. Specifically, if we examine two solos on one song and compute which solo has the highest likelihood of being Stitt (i.e. the greatest margin towards Stitt or lowest margin against Rollins), we can be confident that the other solo is from Rollins! </p>
+        <button type="button" class="collapsible">Updated Classifer</button>
+            <div class="content"><pre><code class="python">def print_stitt_first():
+    print('It is most likely that Stitt was first and Rollins was second')
+
+def print_rollins_first():
+    print('It is most likely that Rollins was first and Stitt was second')
+
+# given two pieces of test data (assuming exactly one is Stitt and one is Rollins),
+# this function indicates which data set is more likely to have been played by Stitt
+# and which is more likely to have been played by Rollins.
+def classify_compare(test_data1, test_data2, stitt_data, rollins_data):
+    log_p_stitt1 = calc_log_score(stitt_data, test_data1, 0.5)
+    log_p_rollins1 = calc_log_score(rollins_data, test_data1, 0.5)
+    margin1 = numpy.abs(log_p_stitt1 - log_p_rollins1)
+    log_p_stitt2 = calc_log_score(stitt_data, test_data2, 0.5)
+    log_p_rollins2 = calc_log_score(rollins_data, test_data2, 0.5)
+    margin2 = numpy.abs(log_p_stitt2 - log_p_rollins2)
+    if log_p_stitt1 - log_p_rollins1 > 0: # we know our model thinks the 1st data set is from Stitt
+        if log_p_stitt2 - log_p_rollins2 > 0: # if 2nd set is also from Stitt, decide based on margin
+            if margin1 > margin2:
+                print_stitt_first()
+            else:
+                print_rollins_first()
+        else: 
+            print_stitt_first()
+    else: # we know our model thinks the 1st data set is from Rollins
+        if log_p_stitt2 - log_p_rollins2 < 0: # if 2nd set is also from Rollins, decide based on margin
+            if margin1 > margin2:
+                print_rollins_first()
+            else:
+                print_stitt_first()
+        else:
+            print_rollins_first()</code></pre></div></p>
+        <label for="parameter2">Choose an input solo and run the classifier!</label>
+        <select id="parameterDropdown2">
+            <option value="sunny stitt">Stitt first on "Sunny Side of the Street"</option>
+            <option value="sunny rollins">Rollins first on "Sunny Side of the Street"</option>
+            <option value="eternal stitt">Stitt first on "The Eternal Triangle"</option>
+            <option value="eternal rollins">Rollins first on "The Eternal Triangle"</option>
+        </select>
+  
+    <button onclick="runClassifierTwo('parameterDropdown2', 'console2')">Run Classifier</button>
+  
+    <div id="console2" class="console"></div>
+    <div id="codeBlock2" class="code-block"></div>
+    </section>
+
+    <!-- Section 6: Limitations -->
+    <section id="reassessment">
+        <h2>Reassessment</h2>
+        <p>This insight has led us to achieve 100%! To be sure, this limits the scope of the classifier's usefulness, but it does what I intended it to—we can distinguish between Stitt's and Rollins' playing on <em>Sonny Side Up</em>!</p>
+    </section>
+
+    <!-- Section 6: Limitations -->
+    <section id="Limitations">
+        <h2>Limitations</h2>
+        <p>Before I leave you, there are several caveats to this model that are worth acknowledged.
+            <ol>
+                <li>The (unwarrented) use of Naive Bayes assumption
+                <ul>
+                <li>Note duration and interval size (especially on saxophone) are very correlated</li>
+                <li>The nature of the instrument restricts one to being more likely to play smaller intervals with shorter note durations</li>
+                <li>Ideally would have used model that doesn't require this assumption (logistic regression)</li>
+                </ul>
+                </li>
+                <li>Our two features cannot full represent a jazz soloist
+                <ul>
+                <li>The more features that we factor in would yield more accurate results</li>
+                <li>More features could include: note articulation, note volume, vibrato, intonation, harmonic relationships, etc.</li>
+                </ul>
+                </li>
+                <li>Data collection is a huge bottleneck
+                <ul>
+                <li>Transcribing solos is a long process</li>
+                <li>It's unrealistic to accumulate sufficient data for any sort of learning model</li>
+                </ul>
+                </li>
+                </ol>
+        </p>
+    </section>
+
+    <!-- Section 6: Conclusion -->
+    <section id="conclusion">
+        <h2>Closing Remarks</h2>
+        <p>Although we successfully achieved what we set out to do, there's a lot that we could expand on from here. For one, data collection could be expedited by outsourcing to jazz musicians and jazz education institutions. Transcription is a huge part of jazz education, so there could be some online program that collects data from jazz musicians that are doing it anyway. This is may still be insufficient, so instead of transcribing actual recordings, our model could analyze existing notated transcriptions (there are many transcription books of single horn player solos that are widely available). This is potentially problematic, as there is much more to the musician than what can be notated on the page, but at the same time, the notated elements are often the features that are quantified the easiest. From here, we would be able to generate much more data and train much more accurate models!</p>
+    </section>
+
+    <!-- Add any additional scripts or links to external scripts here -->
+    <footer>
+        <p>&copy; 2023 E. Buck. All rights reserved.</p>
+    </footer>
+
+</body>
+
+</html>
